@@ -13,3 +13,7 @@ Example spectrogram for key "r"
 *Note here that the buffering size is 0.5s, but in the case of a fast typer we might reduce it so that our spectrogram does not contain parasite keys*
 
 ![keystroke_6_r](https://github.com/user-attachments/assets/114ad7b2-a44b-4006-8a10-9597e8fc58a9)
+
+* Bets result so far from training a Dell mechanical keyboard
+* 
+![confusion_matrix_20250318_093204](https://github.com/user-attachments/assets/13ffa579-c202-4ca7-afe6-fa5e7e7efbc3)
