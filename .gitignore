@@ -1,1 +1,3 @@
-test/keystroke_spectrograms_dell
+
+*.npy
+*.png
