@@ -17,3 +17,7 @@ Example spectrogram for key "r"
 * Bets result so far from training a Dell mechanical keyboard
 * 
 ![confusion_matrix_20250318_093204](https://github.com/user-attachments/assets/13ffa579-c202-4ca7-afe6-fa5e7e7efbc3)
+
+
+![keystroke_102_g](https://github.com/user-attachments/assets/d10ed852-f746-474f-bb1b-47cf19ad4666)
+![keystroke_109_s](https://github.com/user-attachments/assets/c48f4430-3a2f-47ba-a7c0-fc8fd2478f12)
