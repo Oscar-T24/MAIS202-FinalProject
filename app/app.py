@@ -17,13 +17,9 @@ app = Flask(__name__)
 # Global variables
 recording = False
 recording_thread = None
-keyboard_listener = None
-start_time_audio = None
-stop_recording = False
-audio_buffer = []
+stop_flag = threading.Event()
 sample_rate = 44100
 channels = 4
-log_file = None
 
 # Create necessary directories
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio')
@@ -35,54 +31,6 @@ for directory in [AUDIO_DIR, SPECTROGRAMS_DIR, NUMPY_DIR]:
     if not os.path.exists(directory):
         os.makedirs(directory)
         print(f"Created directory: {directory}")
-
-def audio_callback(indata, frames, time, status):
-    """Callback function for audio streaming"""
-    if status:
-        print(f"Audio callback status: {status}")
-    if recording:
-        audio_buffer.append(indata.copy())
-
-def on_press(key):
-    """Callback for key press events"""
-    global log_file, start_time_audio
-    if start_time_audio is None:
-        return  # Don't log if the audio hasn't started yet
-
-    timestamp = time.time() - start_time_audio
-    try:
-        key_str = key.char  # Normal keys
-    except AttributeError:
-        key_str = str(key)  # Special keys like shift, ctrl, etc.
-
-    print(f"Key pressed: {key_str} at {timestamp}")  # Debug print
-    if log_file:
-        with open(log_file, 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([key_str, 'Pressed', round(timestamp, 6)])
-
-def on_release(key):
-    """Callback for key release events"""
-    global recording, log_file, start_time_audio
-    if start_time_audio is None:
-        return  # Don't log if the audio hasn't started yet
-
-    timestamp = time.time() - start_time_audio
-    try:
-        key_str = key.char
-    except AttributeError:
-        key_str = str(key)
-
-    print(f"Key released: {key_str} at {timestamp}")  # Debug print
-    if log_file:
-        with open(log_file, 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([key_str, 'Released', round(timestamp, 6)])
-
-    if key == keyboard.Key.esc:
-        print("ESC key pressed - stopping recording")  # Debug print
-        recording = False
-        return False
 
 def create_spectrogram_and_numpy(audio_segment, key, idx, output_dir, numpy_dir):
     """Generate and save spectrogram and numpy array for a keystroke"""
@@ -123,10 +71,13 @@ def index():
 
 @app.route('/start_recording')
 def start_recording():
-    global recording, recording_thread
+    global recording, recording_thread, stop_flag
 
     if recording:
         return jsonify({"status": "error", "message": "Recording already in progress"})
+
+    # Reset stop flag
+    stop_flag.clear()
 
     # Generate timestamp for filenames
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -141,7 +92,7 @@ def start_recording():
 
     # Start recording in a separate thread
     recording = True
-    recording_thread = threading.Thread(target=data_recording, args=(audio_file, log_file))
+    recording_thread = threading.Thread(target=data_recording, args=(audio_file, log_file, stop_flag))
     recording_thread.start()
     print("Recording started in separate thread")
 
@@ -149,8 +100,11 @@ def start_recording():
 
 @app.route('/stop_recording')
 def stop_recording():
-    global recording, recording_thread
+    global recording, recording_thread, stop_flag
     print(f"Stopping recording. Previous state: {recording}")  # Debug print
+    
+    # Set stop flag
+    stop_flag.set()
     
     recording = False
     if recording_thread:
