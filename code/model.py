@@ -127,7 +127,7 @@ def load_spectrograms_from_directory(directory:str) -> tuple[list,list,int]:
 
     print(f"loaded {len(spectrograms)} spectrograms")
     assert len(spectrograms) == len(keys), "The number of spectrograms and keys do not match!"
-    return spectrograms, keys, max(widths)
+    return spectrograms, keys, max(widths) 
 
 
 ## Need to pad the spectrograms to the same width
@@ -193,13 +193,18 @@ class KeystrokeCNN(nn.Module):
         x = self.pool(F.relu(self.conv2(x)))
         x = self.pool(F.relu(self.conv3(x)))
         return x.numel()  # Flattened size
-    
-    def forward(self, x):
-        
-        dummy_tensor = torch.Tensor[self.input_channels,1,self.input_height,self.input_width]
 
-        assert dummy_tensor.shape == x.shape, f"The input tensors do not match the model's parameters (width/height) \n Expected {dummy_tensor.shape} but got {x.shape}"
-        
+    def forward(self, x):
+
+        batch_size = x.shape[0] # extract the batch size (first dimension)
+        dummy_tensor = torch.Tensor(batch_size, 1, self.input_height, self.input_width)
+
+        try: 
+            assert dummy_tensor.shape == x.shape, f"The input tensors do not match the model's parameters (width/height) \n Expected {dummy_tensor.shape} but got {x.shape}"
+        except AssertionError as e: 
+            print(e)
+            print("skipping incorrect vector")
+    
         x = F.relu(self.conv1(x))
         x = F.max_pool2d(x, 2)
        # print("After conv1+pool:", x.shape)
@@ -222,10 +227,30 @@ class KeystrokeCNN(nn.Module):
 # Initialize the model
 #model = KeystrokeCNN()
 
-def train(model, train_loader, criterion, optimizer,lr, epochs,keyboard_name,BUFFER):
-    model.train()
+def train(model:KeystrokeCNN, spectrogram_tensors:list[torch.Tensor], label_tensor:list[torch.Tensor],lr:float, epochs:int,keyboard_name:str,BUFFER:float,batch_size=64)->tuple[list[float],str]: #:list[torch.Tensor] #:list[torch.Tensor]
+    """
+    Trains the model based on a set of features and labels
+
+    Inputs : 
+    model : instance of KeystrokeCNN CNN model
+    spectrogram_tensor : a list of spectrogram (tensors)
+    label_tensors : a list of labels (tensors)
+    lr : the learning rate
+    epochs : the number of epochs
+    BUFFER (experimental) : adjust the buffer time of audio
+    batch_size : number of samples used in one iteration of gradient descent
+
+    Outputs: 
+
+    the list of losses
+    """
+    train_dataset = KeystrokeDataset(spectrogram_tensors,label_tensor)
+    train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr)
+
+    model.train()
     losses = []
     
     for epoch in range(epochs):
