@@ -313,21 +313,39 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
             
             numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
             np.save(numpy_array_path, Sxx_stacked)
+
+            plt.plot(np.array(range(len(audio_segment))),Sxx_stacked)
+            plt.save(f"keystroke_spectrograms/keystroke_{idx + 1}_{key}")
             # Create time points for plotting
-        else: 
+    else: 
             if extraction_method == "FFT":
+
+                target_time_bins = 300
+
                 f, t, Sxx = signal.spectrogram(audio_segment, sample_rate)
                 Sxx_log = 10 * np.log10(Sxx + 1e-10)
                 
-                time_zoom_factor = target_time_bins / Sxx_log.shape[1]
-                Sxx_resampled = zoom(Sxx_log, (1, time_zoom_factor), order=5)
+                #time_zoom_factor = target_time_bins / Sxx_log.shape[1]
+                #Sxx_resampled = zoom(Sxx_log, (1, time_zoom_factor), order=5)
                 
                 # Add channel dimension for mono audio
-                Sxx_stacked = np.expand_dims(Sxx_resampled, axis=0)
+                Sxx_stacked = np.expand_dims(Sxx_log, axis=0)
                 
                 # Create time points for plotting
                 numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
                 np.save(numpy_array_path, Sxx_stacked)
+
+                # Plot and save the spectrogram
+                plt.figure(figsize=(10, 4))
+                plt.pcolormesh(t, f, Sxx_log, shading='gouraud')
+                plt.ylabel('Frequency [Hz]')
+                plt.xlabel('Time [s]')
+                plt.colorbar(label='Log Power Spectral Density')
+                plt.title(f'Keystroke {idx + 1} - {key}')
+
+                spectrogram_path = os.path.join(OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.png")
+                plt.savefig(spectrogram_path, dpi=300)
+                plt.close()
 
             elif extraction_method == "mel":
 
@@ -356,6 +374,9 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
                 numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
                 np.save(numpy_array_path, mel_spect_stacked)
 
+                plt.plot(mel_spect_stacked)
+                plt.save(f"keystroke_spectrograms/keystroke_{idx + 1}_{key}")
+
 
     #print(f"Saved spectrogram for '{key}' at {spectrogram_path}")
     
@@ -374,7 +395,7 @@ def generate_spectrograms(BUFFER,dataset,extraction_method):
     NUMPY_OUTPUT_DIR = dataset + "/numpy_arrays"  # New directory for NumPy arrays
     sample_rate, audio_data = wav.read(AUDIO_FILE)
 
-    print(f"{len(keystroke_times)} to process")
+    print(f"{len(keystroke_times)}  keys to process")
 
     # process each keystroke by sampling each key with press / release times
     for idx, (key, press_time, release_time) in enumerate(keystroke_times):
