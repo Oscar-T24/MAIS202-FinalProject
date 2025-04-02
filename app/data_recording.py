@@ -5,6 +5,7 @@ import sounddevice as sd
 import threading
 import scipy.io.wavfile as wav
 from pynput import keyboard
+import os
 
 
 def data_recording(audio_file, log_file, stop_flag):
