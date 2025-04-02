@@ -5,16 +5,15 @@ import sounddevice as sd
 import threading
 import scipy.io.wavfile as wav
 from pynput import keyboard
+import os
 
 
-start_time_audio = None
-stop_recording = False
-
-def data_recording(audio_file, log_file):
+def data_recording(audio_file, log_file, stop_flag):
     # Parameters for sound recording
     sample_rate = 44100  # Hz
     channels = 1  # Try stereo first
     audio_buffer = []  # Buffer to store audio data
+    start_time_audio = None
 
     # Initialize the keystroke log file
     with open(log_file, 'w', newline='') as file:
@@ -28,7 +27,7 @@ def data_recording(audio_file, log_file):
         audio_buffer.append(indata.copy())
 
     def record_audio():
-        global start_time_audio, stop_recording
+        nonlocal start_time_audio
         print("Recording audio...")
         
         # Set the start time of the recording
@@ -37,13 +36,13 @@ def data_recording(audio_file, log_file):
         try:
             # Try stereo recording first
             with sd.InputStream(samplerate=sample_rate, channels=channels, callback=audio_callback):
-                while not stop_recording:
+                while not stop_flag.is_set():
                     time.sleep(0.01)
         except Exception as e:
             print("Your computer does not support stereo recording. Defaulting to mono.")
             # Try mono recording
             with sd.InputStream(samplerate=sample_rate, channels=1, callback=audio_callback):
-                while not stop_recording:
+                while not stop_flag.is_set():
                     time.sleep(0.01)
         
         # When stopped, save the recorded audio
@@ -51,6 +50,9 @@ def data_recording(audio_file, log_file):
             audio_data = np.concatenate(audio_buffer, axis=0)
             wav.write(audio_file, sample_rate, audio_data)
             print(f"Audio saved to {audio_file}")
+            print(f"Audio data shape: {audio_data.shape}")
+        else:
+            print("Warning: No audio data was recorded")
         
         print("Audio recording finished")
 
@@ -100,8 +102,7 @@ def data_recording(audio_file, log_file):
 
         # Stop listener if 'Esc' key is pressed
         if key == keyboard.Key.esc:
-            global stop_recording
-            stop_recording = True  # Set flag to stop both recordings
+            stop_flag.set()  # Set flag to stop both recordings
             return False
 
     # Start recording audio in a separate thread
@@ -118,10 +119,10 @@ def data_recording(audio_file, log_file):
     keyboard_thread.start()
 
     # Wait for both threads to finish, while checking for stop condition
-    while not stop_recording:
+    while not stop_flag.is_set():
         time.sleep(0.01)  # Prevent high CPU usage by sleeping briefly
 
-    # Once 'Esc' is pressed, both threads will finish
+    # Once stopped, both threads will finish
     audio_thread.join()
     keyboard_thread.join()
     print("Recording process finished.")

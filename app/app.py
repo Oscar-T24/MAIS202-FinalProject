@@ -1,4 +1,5 @@
 from flask import Flask, render_template, jsonify, request
+from flask_socketio import SocketIO, emit
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write as wav_write
@@ -8,114 +9,26 @@ from pynput import keyboard
 import csv
 import os
 import datetime
-import soundfile as sf
-import librosa
+import shutil
 from data_recording import data_recording
+from app.create_spectrogram import create_spectrogram_and_numpy
 
 app = Flask(__name__)
+socketio = SocketIO(app)
 
 # Global variables
 recording = False
 recording_thread = None
-keyboard_listener = None
-start_time_audio = None
-stop_recording = False
-audio_buffer = []
-sample_rate = 44100
-channels = 4
-log_file = None
+stop_flag = threading.Event()
 
 # Create necessary directories
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio')
-SPECTROGRAMS_DIR = os.path.join(AUDIO_DIR, 'spectrograms')
 NUMPY_DIR = os.path.join(AUDIO_DIR, 'numpy_arrays')
 
-# Create all necessary directories
-for directory in [AUDIO_DIR, SPECTROGRAMS_DIR, NUMPY_DIR]:
+# Create necessary directories
+for directory in [AUDIO_DIR, NUMPY_DIR]:
     if not os.path.exists(directory):
         os.makedirs(directory)
-        print(f"Created directory: {directory}")
-
-def audio_callback(indata, frames, time, status):
-    """Callback function for audio streaming"""
-    if status:
-        print(f"Audio callback status: {status}")
-    if recording:
-        audio_buffer.append(indata.copy())
-
-def on_press(key):
-    """Callback for key press events"""
-    global log_file, start_time_audio
-    if start_time_audio is None:
-        return  # Don't log if the audio hasn't started yet
-
-    timestamp = time.time() - start_time_audio
-    try:
-        key_str = key.char  # Normal keys
-    except AttributeError:
-        key_str = str(key)  # Special keys like shift, ctrl, etc.
-
-    print(f"Key pressed: {key_str} at {timestamp}")  # Debug print
-    if log_file:
-        with open(log_file, 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([key_str, 'Pressed', round(timestamp, 6)])
-
-def on_release(key):
-    """Callback for key release events"""
-    global recording, log_file, start_time_audio
-    if start_time_audio is None:
-        return  # Don't log if the audio hasn't started yet
-
-    timestamp = time.time() - start_time_audio
-    try:
-        key_str = key.char
-    except AttributeError:
-        key_str = str(key)
-
-    print(f"Key released: {key_str} at {timestamp}")  # Debug print
-    if log_file:
-        with open(log_file, 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([key_str, 'Released', round(timestamp, 6)])
-
-    if key == keyboard.Key.esc:
-        print("ESC key pressed - stopping recording")  # Debug print
-        recording = False
-        return False
-
-def create_spectrogram_and_numpy(audio_segment, key, idx, output_dir, numpy_dir):
-    """Generate and save spectrogram and numpy array for a keystroke"""
-    if len(audio_segment.shape) > 1:  # If it's multi-channel
-        print(f"Processing keystroke {idx + 1} for key '{key}'")
-        print(f"Audio segment shape: {audio_segment.shape}")
-        mel_specs = []
-        for channel in range(audio_segment.shape[1]):
-            mel_spec = librosa.feature.melspectrogram(
-                y=audio_segment[:, channel].astype(np.float32),
-                sr=sample_rate,
-                n_mels=80,
-                n_fft=2048,
-                hop_length=512,
-                window='hann',
-                power=2.0
-            )
-            mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-            mel_spec_norm = (mel_spec_db - mel_spec_db.min()) / (mel_spec_db.max() - mel_spec_db.min())
-            mel_specs.append(mel_spec_norm)
-        
-        mel_spect_stacked = np.stack(mel_specs, axis=-1)
-        numpy_array_path = os.path.join(numpy_dir, f"keystroke_{idx + 1}_{key}.npy")
-        
-        # Ensure the numpy directory exists
-        os.makedirs(numpy_dir, exist_ok=True)
-        
-        # Save the numpy array
-        np.save(numpy_array_path, mel_spect_stacked)
-        print(f"Saved 4D NumPy array for '{key}' at {numpy_array_path}")
-        print(f"Array shape: {mel_spect_stacked.shape}")
-    else:
-        print(f"Warning: Audio segment for keystroke {idx + 1} is not multi-channel")
 
 @app.route('/')
 def index():
@@ -123,42 +36,82 @@ def index():
 
 @app.route('/start_recording')
 def start_recording():
-    global recording, recording_thread
+    global recording, recording_thread, stop_flag
 
     if recording:
         return jsonify({"status": "error", "message": "Recording already in progress"})
+
+    # Reset stop flag
+    stop_flag.clear()
 
     # Generate timestamp for filenames
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     audio_file = os.path.join(AUDIO_DIR, f'recording_{timestamp}.wav')
     log_file = os.path.join(AUDIO_DIR, f'keylog_{timestamp}.csv')
 
-    print(f"Starting recording session:")
-    print(f"Audio file: {audio_file}")
-    print(f"Log file: {log_file}")
-    print(f"Numpy directory: {NUMPY_DIR}")
-    print(f"Spectrograms directory: {SPECTROGRAMS_DIR}")
-
     # Start recording in a separate thread
     recording = True
-    recording_thread = threading.Thread(target=data_recording, args=(audio_file, log_file))
+    recording_thread = threading.Thread(target=data_recording, args=(audio_file, log_file, stop_flag))
     recording_thread.start()
-    print("Recording started in separate thread")
 
     return jsonify({"status": "success", "message": "Recording started"})
 
 @app.route('/stop_recording')
 def stop_recording():
-    global recording, recording_thread
-    print(f"Stopping recording. Previous state: {recording}")  # Debug print
+    global recording, recording_thread, stop_flag
+    
+    # Set stop flag
+    stop_flag.set()
     
     recording = False
     if recording_thread:
         recording_thread.join()
-        print("Recording thread joined")
     
-    print(f"Recording stopped. New state: {recording}")  # Debug print
     return jsonify({"status": "success", "message": "Recording stopped"})
 
+@app.route('/train_model')
+def train_model():
+    # Get the most recent recording files
+    audio_files = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('recording_') and f.endswith('.wav')])
+    log_files = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('keylog_') and f.endswith('.csv')])
+    
+    if not audio_files or not log_files:
+        return jsonify({"status": "error", "message": "No recording files found"})
+    
+    latest_audio = os.path.join(AUDIO_DIR, audio_files[-1])
+    latest_log = os.path.join(AUDIO_DIR, log_files[-1])
+    
+    try:
+        # Read the audio file
+        sample_rate, audio_data = wav_write(latest_audio)
+        
+        # Read the keystroke log
+        keystrokes = []
+        with open(latest_log, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip header
+            for row in reader:
+                keystrokes.append(row)
+        
+        # Process each keystroke
+        for idx, (key, action, timestamp) in enumerate(keystrokes):
+            if action == 'Pressed':  # Only process key press events
+                # Extract audio segment around the keystroke
+                start_sample = int(float(timestamp) * sample_rate)
+                duration_samples = int(0.1 * sample_rate)  # 100ms window
+                audio_segment = audio_data[start_sample:start_sample + duration_samples]
+                
+                # Create spectrogram and numpy array
+                create_spectrogram_and_numpy(audio_segment, AUDIO_DIR, key, idx)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Numpy arrays created successfully",
+            "num_keystrokes": len(keystrokes)
+        })
+    
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 if __name__ == '__main__':
-    app.run(port="5001",debug=True)
+    socketio.run(app, port=5001, debug=True)
