@@ -39,6 +39,10 @@
             background-color: #2196F3;
             color: white;
         }
+        .train-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
         .status {
             margin-top: 10px;
             padding: 10px;
@@ -86,7 +90,7 @@
 
         <div class="section">
             <h2>Training</h2>
-            <button id="trainButton" class="button train-button">Train Model</button>
+            <button id="trainButton" class="button train-button" disabled>Train Model</button>
             <div id="trainingStatus" class="status"></div>
         </div>
 
@@ -127,6 +131,7 @@
                         recordButton.classList.add('recording');
                         recordingStatus.textContent = 'Recording in progress. Press ESC to stop.';
                         recordingStatus.className = 'status info';
+                        trainButton.disabled = true;
                     } else {
                         recordingStatus.textContent = data.message;
                         recordingStatus.className = 'status error';
@@ -140,15 +145,25 @@
 
         trainButton.addEventListener('click', async () => {
             try {
-                trainingStatus.textContent = 'Training in progress...';
+                trainingStatus.textContent = 'Processing data...';
                 trainingStatus.className = 'status info';
-                const response = await fetch('/train_model', { method: 'POST' });
+                trainButton.disabled = true;
+                
+                const response = await fetch('/train_model');
                 const data = await response.json();
-                trainingStatus.textContent = data.message;
-                trainingStatus.className = `status ${data.status}`;
+                
+                if (data.status === 'success') {
+                    trainingStatus.textContent = `Numpy arrays created for ${data.num_keystrokes} keystrokes`;
+                    trainingStatus.className = 'status success';
+                } else {
+                    trainingStatus.textContent = data.message;
+                    trainingStatus.className = 'status error';
+                }
             } catch (error) {
-                trainingStatus.textContent = 'Error during training';
+                trainingStatus.textContent = 'Error processing data';
                 trainingStatus.className = 'status error';
+            } finally {
+                trainButton.disabled = false;
             }
         });
 
@@ -164,6 +179,7 @@
                         recordButton.classList.remove('recording');
                         recordingStatus.textContent = 'Data has been recorded';
                         recordingStatus.className = 'status success';
+                        trainButton.disabled = false;
                     }
                 } catch (error) {
                     recordingStatus.textContent = 'Error stopping recording';

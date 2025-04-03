@@ -2,7 +2,7 @@ from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
 import numpy as np
 import sounddevice as sd
-from scipy.io.wavfile import write as wav_write
+from scipy.io.wavfile import read as wav_read, write as wav_write
 import threading
 import time
 from pynput import keyboard
@@ -11,7 +11,7 @@ import os
 import datetime
 import shutil
 from data_recording import data_recording
-from app.create_spectrogram import create_spectrogram_and_numpy
+from create_spectrogram import create_spectrogram_and_numpy
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -83,7 +83,7 @@ def train_model():
     
     try:
         # Read the audio file
-        sample_rate, audio_data = wav_write(latest_audio)
+        sample_rate, audio_data = wav_read(latest_audio)
         
         # Read the keystroke log
         keystrokes = []
@@ -102,7 +102,7 @@ def train_model():
                 audio_segment = audio_data[start_sample:start_sample + duration_samples]
                 
                 # Create spectrogram and numpy array
-                create_spectrogram_and_numpy(audio_segment, AUDIO_DIR, key, idx)
+                create_spectrogram_and_numpy(audio_segment, key, idx)
         
         return jsonify({
             "status": "success",
