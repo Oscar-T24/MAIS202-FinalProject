@@ -6,7 +6,6 @@ import threading
 import sounddevice as sd
 import numpy as np
 from pynput import keyboard
-from scipy.io.wavfile import write as wav_write
 import os
 import librosa
 import numpy as np
@@ -40,9 +39,6 @@ def set_keyboard_layout():
         print(f"Warning: The directory {DATA_DIR} already exists.")
 
     return DATA_DIR
-
-
-
 
 
 def data_recording():
@@ -178,7 +174,7 @@ def data_recording():
     keyboard_thread.join()
     print("Recording process finished.")
 
-def data_processing(dataset:str) -> dict[str:list,str:float,str:float]:
+def data_processing(log_file:str,dataset=None) -> dict[str:list,str:float,str:float]:
     """
     Function to preprocess the keystroke data
 
@@ -189,9 +185,7 @@ def data_processing(dataset:str) -> dict[str:list,str:float,str:float]:
 
     Using a stack to keep track of the keys that were pressed and the times at which they were pressed
     """
-    DATA_DIR = dataset#set_keyboard_layout()
-
-    log_file = f'{DATA_DIR}/key_log.csv'
+    #DATA_DIR = dataset#set_keyboard_layout()
 
     averages = []
 
@@ -381,18 +375,32 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
     #print(f"Saved spectrogram for '{key}' at {spectrogram_path}")
     
 
-def generate_spectrograms(BUFFER,dataset,extraction_method):
+def generate_spectrograms(BUFFER,dataset=None,extraction_method="FFT"):
+    """
+    generates the spectrogram
+    """
 
-    stats = data_processing(dataset)
+    if dataset is None: 
+        AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio')
+        dataset = AUDIO_DIR
+        # find the latest audio file
+        audio_files = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('recording_') and f.endswith('.wav')])
+        log_files = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('keylog_') and f.endswith('.csv')])
+
+        AUDIO_FILE = os.path.join(AUDIO_DIR, audio_files[-1])
+        LOG_FILE = os.path.join(AUDIO_DIR, log_files[-1])
+        # set the audio directory as dataset
+
+    else: 
+        AUDIO_DIR = dataset
+        AUDIO_FILE = f'{dataset}/aligned_iphone.wav'
+        LOG_FILE = f'{dataset}/key_log.csv'
+        # use the development dataset
+
+    stats = data_processing(LOG_FILE) # get the keystroke statistics
 
     keystroke_times = stats["keystroke_times"]
 
-    audio_file = f'{dataset}/aligned_iphone.wav'
-    log_file = f'{dataset}/key_log.csv'
-    AUDIO_FILE = audio_file
-    KEYSTROKE_CSV = log_file
-    OUTPUT_DIR = dataset + "/keystroke_spectrograms"
-    NUMPY_OUTPUT_DIR = dataset + "/numpy_arrays"  # New directory for NumPy arrays
     sample_rate, audio_data = wav.read(AUDIO_FILE)
 
     print(f"{len(keystroke_times)}  keys to process")
@@ -416,4 +424,4 @@ def generate_spectrograms(BUFFER,dataset,extraction_method):
 
     print("Processing complete. Spectrograms and NumPy arrays saved.")
 
-    return 0#average_keystroke_duration
+    return 1#average_keystroke_duration
