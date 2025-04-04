@@ -227,7 +227,7 @@ class KeystrokeCNN(nn.Module):
 # Initialize the model
 #model = KeystrokeCNN()
 
-def train(model:KeystrokeCNN, spectrogram_tensors:list[torch.Tensor], label_tensor:list[torch.Tensor],lr:float, epochs:int,keyboard_name:str,BUFFER:float,batch_size=64)->tuple[list[float],str]: #:list[torch.Tensor] #:list[torch.Tensor]
+def train(model:KeystrokeCNN, spectrogram_tensors:list[torch.Tensor], label_tensor:list[torch.Tensor],lr:float, epochs:int,dataset:str,BUFFER:float,batch_size=64,debug=False)->tuple[list[float],str]: #:list[torch.Tensor] #:list[torch.Tensor]
     """
     Trains the model based on a set of features and labels
 
@@ -281,7 +281,7 @@ def train(model:KeystrokeCNN, spectrogram_tensors:list[torch.Tensor], label_tens
         avg_epoch_loss = sum(epoch_losses) / len(epoch_losses)
         losses.append(avg_epoch_loss)
         print(f"Epoch {epoch + 1} average loss: {avg_epoch_loss:.3f}")
-        """ Save model after each epoch
+        """Save model after each epoch
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -289,23 +289,28 @@ def train(model:KeystrokeCNN, spectrogram_tensors:list[torch.Tensor], label_tens
             'loss': avg_epoch_loss,
         }, f"{save_path}_epoch_{epoch+1}.pt")
         """
-    filename  = datetime.now().strftime("%Y%m%d_%H%M%S") + '_' + keyboard_name + '_keystroke_model.pt'
+    filename = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'dataset',
+    dataset,
+    "model_"+datetime.now().strftime("%Y%m%d_%H%M%S")+'.pt'
+    )
     # Save final model
-    """
+
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': losses[-1],
         'epochs': epochs, 
     }, filename)
-    """
 
-    plt.plot(range(epochs), losses)
-    plt.title(f'Training Loss for {epochs} epochs, {model} model, {criterion} loss function, and {lr} learning rate')
-    plt.xlabel('Epoch')
-    plt.ylabel('Error')
-    plt.savefig(f'training_loss_{BUFFER}.png', dpi=300, bbox_inches='tight')
-    #plt.show()
+    if debug:
+        plt.plot(range(epochs), losses)
+        plt.title(f'Training Loss for {epochs} epochs, {model} model, {criterion} loss function, and {lr} learning rate')
+        plt.xlabel('Epoch')
+        plt.ylabel('Error')
+        plt.savefig(f'training_loss_{BUFFER}.png', dpi=300, bbox_inches='tight')
+        #plt.show()
         
     return losses, filename
 

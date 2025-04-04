@@ -17,6 +17,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 from data_processing import generate_spectrograms
 from model import key_to_idx_tensors, KeystrokeCNN, train
 import torch
+import torch.nn.functional as F
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -96,7 +97,21 @@ def train_model():
 
         spectrograms, labels = zip(*data) # unzip the list 
 
-        spectrogram_tensors, label_tensors = torch.tensor(spectrograms).float(),key_to_idx_tensors(labels) # convert the label and features to tensors
+        spectrogram_tensors = []
+        for spectrogram in spectrograms:
+
+            BASE_SIZE = torch.Size([1,129,300])
+            converted = torch.tensor(spectrogram).float()
+
+            if converted.shape[2] != BASE_SIZE[2]:
+                # pad the tensor
+                converted = F.pad(converted, (0, 300 - converted.shape[2]))
+            if converted.shape != BASE_SIZE:
+                print(f"Warning : Spectrogram tensor shape {converted.shape} does not match the expected size {BASE_SIZE}")
+                continue
+            spectrogram_tensors.append(converted)
+
+        label_tensors = key_to_idx_tensors(labels) # convert the label and features to tensors
 
         model = KeystrokeCNN()
 
@@ -105,13 +120,35 @@ def train_model():
         
         return jsonify({
             "status": "success",
-            "message": "Numpy arrays created successfully",
+            "message": "Numpy arrays created successfully. Model trained",
             "num_keystrokes": len(data),
         })
     
     except Exception as e:
         #print(e)
         return jsonify({"status": "error", "message": str(e)})
+    
+@app.route("/predict")
+def predict():
+    # So here need to continuously record the audio 
+
+    models  = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('model_') and f.endswith('.pt')])
+    if len(models) == 0: 
+        raise Exception("No model available !")
+    checkpoint = os.path.join(AUDIO_DIR, models[-1])
+    model = KeystrokeCNN()
+    checkpoint_data = torch.load(checkpoint)
+    model.load_state_dict(checkpoint_data['model_state_dict'])
+    print("Model loaded successfully")
+
+    # Then set the model to eval 
+    # Zach, please have a read at the nn.ipynb cells where I implemented a live prediction code. 
+
+    # Basically, you need to record the audio continuously, perform the fourrier transform and output keyboard prediction based on energy level triggering
+
+    
+
+    return "Model loaded successfully !"
 
 if __name__ == '__main__':
     socketio.run(app, port=5001, debug=True)
