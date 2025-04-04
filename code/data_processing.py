@@ -174,7 +174,7 @@ def data_recording():
     keyboard_thread.join()
     print("Recording process finished.")
 
-def data_processing(log_file:str,dataset=None) -> dict[str:list,str:float,str:float]:
+def data_processing(log_file:str) -> dict[str:list,str:float,str:float]:
     """
     Function to preprocess the keystroke data
 
@@ -256,12 +256,16 @@ def data_processing(log_file:str,dataset=None) -> dict[str:list,str:float,str:fl
     return {"keystroke_times":keystroke_times,"average_duration":sum(averages)/len(averages),"average_interval":sum(averages_)/len(averages_)}
 
 
-def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:str, key:str, idx:int):
-    # Generate the spectrogram using scipy
+def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:str, key:str, idx:int,debug=False):
+    """
+    Generates the spectrogram using FFT or Mel, and returns a list of tuples containing the spectrograms
+    """
 
     sample_rate = 44100
-    NUMPY_OUTPUT_DIR = dataset + "/numpy_arrays"
-    OUTPUT_DIR = dataset + "/keystroke_spectrograms"
+
+    NUMPY_OUTPUT_DIR = os.path.join(os.path.abspath(__file__),"dataset",dataset,"/numpy_arrays")
+    OUTPUT_DIR = os.path.join(os.path.abspath(__file__),"dataset",dataset,"/keystroke_spectrogram")
+
 
     if len(audio_segment.shape) > 1:  # If it's multi-channel
         #print("channel dimension",audio_segment.shape)
@@ -285,10 +289,13 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
             # Stack the spectrograms along a new axis
             # Shape will be (n_mels, time_steps, channels)
             mel_spect_stacked = np.stack(mel_specs, axis=-1)
+
+            spectrogram_array = (mel_spect_stacked,key)
             
-            # Save the stacked spectrograms as a NumPy array
-            numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
-            np.save(numpy_array_path, mel_spect_stacked)
+            if debug:
+                # Save the stacked spectrograms as a NumPy array
+                numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
+                np.save(numpy_array_path, mel_spect_stacked)
             #print(f"Saved 4D NumPy array for '{key}' at {numpy_array_path}")
         elif extraction_method == "FFT":
             spectrograms = []
@@ -305,11 +312,14 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
             Sxx_stacked = np.stack(spectrograms, axis=-1)
             Sxx_stacked = np.transpose(Sxx_stacked, (2, 0, 1))
             
-            numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
-            np.save(numpy_array_path, Sxx_stacked)
+            spectrogram_array (Sxx_stacked,key)
 
-            plt.plot(np.array(range(len(audio_segment))),Sxx_stacked)
-            plt.save(f"keystroke_spectrograms/keystroke_{idx + 1}_{key}")
+            if debug:
+                numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
+                np.save(numpy_array_path, Sxx_stacked)
+
+                plt.plot(np.array(range(len(audio_segment))),Sxx_stacked)
+                plt.save(f"keystroke_spectrograms/keystroke_{idx + 1}_{key}")
             # Create time points for plotting
     else: 
             if extraction_method == "FFT":
@@ -325,21 +335,25 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
                 # Add channel dimension for mono audio
                 Sxx_stacked = np.expand_dims(Sxx_log, axis=0)
                 
-                # Create time points for plotting
-                numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
-                np.save(numpy_array_path, Sxx_stacked)
+                spectrogram_array = (Sxx_stacked,key)
 
-                # Plot and save the spectrogram
-                plt.figure(figsize=(10, 4))
-                plt.pcolormesh(t, f, Sxx_log, shading='gouraud')
-                plt.ylabel('Frequency [Hz]')
-                plt.xlabel('Time [s]')
-                plt.colorbar(label='Log Power Spectral Density')
-                plt.title(f'Keystroke {idx + 1} - {key}')
+                if debug: 
+                    # Create time points for plotting
+                    numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
 
-                spectrogram_path = os.path.join(OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.png")
-                plt.savefig(spectrogram_path, dpi=300)
-                plt.close()
+                    np.save(numpy_array_path, Sxx_stacked)
+
+                    # Plot and save the spectrogram
+                    plt.figure(figsize=(10, 4))
+                    plt.pcolormesh(t, f, Sxx_log, shading='gouraud')
+                    plt.ylabel('Frequency [Hz]')
+                    plt.xlabel('Time [s]')
+                    plt.colorbar(label='Log Power Spectral Density')
+                    plt.title(f'Keystroke {idx + 1} - {key}')
+
+                    spectrogram_path = os.path.join(OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.png")
+                    plt.savefig(spectrogram_path, dpi=300)
+                    plt.close()
 
             elif extraction_method == "mel":
 
@@ -371,31 +385,22 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
                 plt.plot(mel_spect_stacked)
                 plt.save(f"keystroke_spectrograms/keystroke_{idx + 1}_{key}")
 
-
+    return spectrogram_array
     #print(f"Saved spectrogram for '{key}' at {spectrogram_path}")
     
 
-def generate_spectrograms(BUFFER,dataset=None,extraction_method="FFT"):
+def generate_spectrograms(BUFFER,dataset="demo",extraction_method="FFT"):
     """
     generates the spectrogram
     """
 
-    if dataset is None: 
-        AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio')
-        dataset = AUDIO_DIR
         # find the latest audio file
-        audio_files = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('recording_') and f.endswith('.wav')])
-        log_files = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('keylog_') and f.endswith('.csv')])
+    audio_files = sorted([f for f in os.listdir(os.path.join("dataset",dataset)) if f.startswith('recording_') and f.endswith('.wav')])
+    log_files = sorted([f for f in os.listdir(os.path.join("dataset",dataset)) if f.startswith('keylog_') and f.endswith('.csv')])
 
-        AUDIO_FILE = os.path.join(AUDIO_DIR, audio_files[-1])
-        LOG_FILE = os.path.join(AUDIO_DIR, log_files[-1])
+    AUDIO_FILE = os.path.join("dataset",dataset, audio_files[-1])
+    LOG_FILE = os.path.join("dataset",dataset, log_files[-1])
         # set the audio directory as dataset
-
-    else: 
-        AUDIO_DIR = dataset
-        AUDIO_FILE = f'{dataset}/aligned_iphone.wav'
-        LOG_FILE = f'{dataset}/key_log.csv'
-        # use the development dataset
 
     stats = data_processing(LOG_FILE) # get the keystroke statistics
 
@@ -404,6 +409,8 @@ def generate_spectrograms(BUFFER,dataset=None,extraction_method="FFT"):
     sample_rate, audio_data = wav.read(AUDIO_FILE)
 
     print(f"{len(keystroke_times)}  keys to process")
+
+    data = []
 
     # process each keystroke by sampling each key with press / release times
     for idx, (key, press_time, release_time) in enumerate(keystroke_times):
@@ -420,8 +427,10 @@ def generate_spectrograms(BUFFER,dataset=None,extraction_method="FFT"):
             print(f"Warning: Empty audio segment for keystroke {idx + 1}")
             continue
             
-        create_spectrogram_and_numpy(keystroke_audio,dataset,extraction_method, key, idx)
+        feature,label = create_spectrogram_and_numpy(keystroke_audio,dataset,extraction_method, key, idx)
+
+        data.append((feature,label))
 
     print("Processing complete. Spectrograms and NumPy arrays saved.")
 
-    return 1#average_keystroke_duration
+    return data
