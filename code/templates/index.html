@@ -43,6 +43,13 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+        .predict-button {
+            background-color: #9C27B0;
+            color: white;
+        }
+        .predict-button.active {
+            background-color: #f44336;
+        }
         .status {
             margin-top: 10px;
             padding: 10px;
@@ -75,6 +82,28 @@
         .key.active {
             background-color: #e0e0e0;
         }
+        #predictionDisplay {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #9C27B0;
+            border-radius: 5px;
+            min-height: 50px;
+        }
+        #predictionHistory {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+        }
+        .prediction-item {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
     </style>
 </head>
 <body>
@@ -96,18 +125,26 @@
 
         <div class="section">
             <h2>Prediction Mode</h2>
-            <div id="keyboard"></div>
+            <button id="predictButton" class="button predict-button">Start Prediction</button>
             <div id="predictionStatus" class="status"></div>
+            <div id="predictionDisplay">No prediction yet</div>
+            <div id="predictionHistory"></div>
+            <div id="keyboard"></div>
         </div>
     </div>
 
     <script>
         let isRecording = false;
+        let isPredicting = false;
+        let predictionInterval = null;
         const recordButton = document.getElementById('recordButton');
         const recordingStatus = document.getElementById('recordingStatus');
         const trainButton = document.getElementById('trainButton');
         const trainingStatus = document.getElementById('trainingStatus');
+        const predictButton = document.getElementById('predictButton');
         const predictionStatus = document.getElementById('predictionStatus');
+        const predictionDisplay = document.getElementById('predictionDisplay');
+        const predictionHistory = document.getElementById('predictionHistory');
         const keyboard = document.getElementById('keyboard');
         const socket = io();
 
@@ -167,6 +204,80 @@
             }
         });
 
+        predictButton.addEventListener('click', async () => {
+            if (!isPredicting) {
+                try {
+                    const response = await fetch('/predict');
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        isPredicting = true;
+                        predictButton.textContent = 'Stop Prediction';
+                        predictButton.classList.add('active');
+                        predictionStatus.textContent = 'Listening for keystrokes...';
+                        predictionStatus.className = 'status info';
+                        
+                        // Start polling for predictions
+                        predictionInterval = setInterval(pollForPredictions, 500);
+                    } else {
+                        predictionStatus.textContent = data.message;
+                        predictionStatus.className = 'status error';
+                    }
+                } catch (error) {
+                    predictionStatus.textContent = 'Error starting prediction';
+                    predictionStatus.className = 'status error';
+                }
+            } else {
+                try {
+                    const response = await fetch('/stop_predict');
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        isPredicting = false;
+                        predictButton.textContent = 'Start Prediction';
+                        predictButton.classList.remove('active');
+                        predictionStatus.textContent = 'Prediction stopped';
+                        predictionStatus.className = 'status info';
+                        
+                        // Stop polling for predictions
+                        clearInterval(predictionInterval);
+                    }
+                } catch (error) {
+                    predictionStatus.textContent = 'Error stopping prediction';
+                    predictionStatus.className = 'status error';
+                }
+            }
+        });
+
+        // Function to poll for predictions
+        async function pollForPredictions() {
+            try {
+                const response = await fetch('/get_prediction');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Update the prediction display
+                    predictionDisplay.textContent = `Predicted Key: ${data.prediction}`;
+                    
+                    // Add to prediction history
+                    const predictionItem = document.createElement('div');
+                    predictionItem.className = 'prediction-item';
+                    predictionItem.textContent = `Key: ${data.prediction} (${new Date().toLocaleTimeString()})`;
+                    predictionHistory.insertBefore(predictionItem, predictionHistory.firstChild);
+                    
+                    // Highlight the key on the keyboard
+                    const keys = keyboard.getElementsByClassName('key');
+                    Array.from(keys).forEach(key => {
+                        if (key.textContent === data.prediction) {
+                            key.classList.add('active');
+                        } else {
+                            key.classList.remove('active');
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error getting predictions:', error);
+            }
+        }
+
         // Listen for ESC key to stop recording
         document.addEventListener('keydown', async (event) => {
             if (event.key === 'Escape' && isRecording) {
@@ -187,37 +298,6 @@
                 }
             }
         });
-
-        // Update keyboard display with predictions
-        function updateKeyboardDisplay(predictions) {
-            const keys = keyboard.getElementsByClassName('key');
-            Array.from(keys).forEach(key => key.classList.remove('active'));
-            
-            if (predictions && predictions.length > 0) {
-                predictions.forEach(pred => {
-                    const keyElement = Array.from(keys).find(k => k.textContent === pred.key);
-                    if (keyElement) {
-                        keyElement.classList.add('active');
-                        keyElement.style.backgroundColor = `rgba(76, 175, 80, ${pred.probability})`;
-                    }
-                });
-            }
-        }
-
-        // Poll for predictions during recording
-        setInterval(async () => {
-            if (isRecording) {
-                try {
-                    const response = await fetch('/predict');
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        updateKeyboardDisplay(data.predictions);
-                    }
-                } catch (error) {
-                    console.error('Error getting predictions:', error);
-                }
-            }
-        }, 100);
     </script>
 </body>
 </html>

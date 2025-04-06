@@ -18,6 +18,9 @@ from data_processing import generate_spectrograms
 from model import key_to_idx_tensors, KeystrokeCNN, train
 import torch
 import torch.nn.functional as F
+import librosa
+from scipy.signal import find_peaks
+from queue import Queue
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -142,13 +145,61 @@ def predict():
     print("Model loaded successfully")
 
     # Then set the model to eval 
-    # Zach, please have a read at the nn.ipynb cells where I implemented a live prediction code. 
-
-    # Basically, you need to record the audio continuously, perform the fourrier transform and output keyboard prediction based on energy level triggering
-
+    model.eval()  # Set model to evaluation mode
     
+    # Create a global variable to store the detector instance
+    global detector
+    detector = None
+   
+    # Import the LiveKeystrokeDetector from the new Python file
+    from live_keystroke_detector import LiveKeystrokeDetector
+    
+    # Define a function to start the detector in a separate thread
+    def start_detector():
+        global detector
+        detector = LiveKeystrokeDetector(model)
+        detector.start_recording()
+    
+    # Start the detector in a separate thread
+    detector_thread = threading.Thread(target=start_detector)
+    detector_thread.daemon = True  # Make thread daemon so it exits when main thread exits
+    detector_thread.start()
+    
+    return jsonify({
+        "status": "success",
+        "message": "Keystroke detection started. Listening for keystrokes..."
+    })
 
-    return "Model loaded successfully !"
+@app.route("/stop_predict")
+def stop_predict():
+    global detector
+    if detector:
+        detector.stop_recording()
+        detector = None
+        return jsonify({
+            "status": "success",
+            "message": "Keystroke detection stopped."
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "No active keystroke detection."
+        })
+
+@app.route("/get_prediction")
+def get_prediction():
+    global detector
+    if detector and not detector.prediction_queue.empty():
+        prediction = detector.prediction_queue.get_nowait()
+        return jsonify({
+            "status": "success",
+            "prediction": prediction
+        })
+    else:
+        return jsonify({
+            "status": "waiting",
+            "message": "No prediction available yet."
+        })
 
 if __name__ == '__main__':
     socketio.run(app, port=5001, debug=True)
