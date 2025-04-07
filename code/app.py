@@ -137,7 +137,7 @@ def predict():
 
     models  = sorted([f for f in os.listdir(AUDIO_DIR) if f.startswith('model_') and f.endswith('.pt')])
     if len(models) == 0: 
-        raise Exception("No model available !")
+        raise Exception(f"No model file (.pt) could be found in the directory{AUDIO_DIR}")
     checkpoint = os.path.join(AUDIO_DIR, models[-1])
     model = KeystrokeCNN()
     checkpoint_data = torch.load(checkpoint)

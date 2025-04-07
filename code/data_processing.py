@@ -312,7 +312,7 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
             Sxx_stacked = np.stack(spectrograms, axis=-1)
             Sxx_stacked = np.transpose(Sxx_stacked, (2, 0, 1))
             
-            spectrogram_array (Sxx_stacked,key)
+            spectrogram_array = (Sxx_stacked,key)
 
             if debug:
                 numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")

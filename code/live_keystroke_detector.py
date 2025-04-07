@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from scipy.signal import find_peaks
 from queue import Queue
 import time
+from data_processing import create_spectrogram_and_numpy
 
 class LiveKeystrokeDetector:
     def __init__(self, model, sample_rate=44100, window_size=0.2, threshold=0.9999999):
@@ -18,6 +19,7 @@ class LiveKeystrokeDetector:
         self.prediction_queue = Queue()
         self.is_recording = False
         self.debounce_time = time.time()
+        self.letters = "abcdefghijklmnopqrstuvwxyz"
         
     def audio_callback(self, indata, frames, time_info, status):
         """Callback function for audio streaming"""
@@ -27,7 +29,12 @@ class LiveKeystrokeDetector:
         # Update buffer with new audio data
         self.audio_buffer = np.roll(self.audio_buffer, -frames)
         self.audio_buffer[-frames:] = indata.flatten()
+
+        # use the create_spectrogram function to retrive numpy spectrogram
+
+        spectrogram_array = create_spectrogram_and_numpy(self.audio_buffer,"demo","FFT",None,None)[0]
         
+        """
         # Generate mel spectrogram
         mel_spect = librosa.feature.melspectrogram(
             y=self.audio_buffer,
@@ -58,23 +65,38 @@ class LiveKeystrokeDetector:
             # Center crop to 300
             start = (current_length - 300) // 2
             spectrogram_tensor = spectrogram_tensor[..., start:start+300]
+
+        """
         
         # Get the energy over time
-        energy = np.mean(mel_spect, axis=0)
+        energy = np.sum(spectrogram_array[0], axis=0)  # shape: (time_bins,)
+
         
-        # Find peaks with minimum height and distance
-        peaks, _ = find_peaks(energy, 
-                            height=0.5,          # Minimum height
-                            distance=20,         # Minimum samples between peaks
-                            prominence=0.3)      # Minimum prominence of peaks
+        threshold = np.percentile(energy, 75)
+
+        peaks, properties = find_peaks(
+        energy,
+        height=np.percentile(energy, 60),
+        distance=5,
+        prominence=1
+        )   
+        
+
+        # need to finetune 
+
+        #TODO : convert the spectrogram to tensors
         
         if len(peaks) > 0 and time.time() - self.debounce_time > 1:
             print("Keystroke detected")
             # Make prediction
             with torch.no_grad():
-                spectrogram_tensor = spectrogram_tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+                spectrogram_tensor = torch.FloatTensor(spectrogram_array).unsqueeze(0) # add batch size
+                if spectrogram_tensor.shape[-1] < 300:
+                    padding = (0, 300 - spectrogram_tensor.shape[-1])
+                    spectrogram_tensor = F.pad(spectrogram_tensor,padding,"constant",0) # pad with zeros
                 output = self.model(spectrogram_tensor)  # Forward pass
                 probabilities = F.softmax(output, dim=1)  # Convert logits to probabilities
+                """
                 predicted_idx = torch.argmax(probabilities, dim=1).item()  # Get class index
                 
                 # Convert index to letter
@@ -83,6 +105,18 @@ class LiveKeystrokeDetector:
                 
                 self.prediction_queue.put(predicted_letter)
                 print(f"Predicted key: {predicted_letter}")
+                """
+                # Version 2 : put the top k keys into a list 
+                topk_probs, topk_indices = torch.topk(probabilities, k=10, dim=1)
+
+                topk_indices = topk_indices.squeeze().tolist()
+                topk_probs = topk_probs.squeeze().tolist()
+
+                topk_letters = [(self.letters[i],round(prob,2)) for i,prob in zip(topk_indices,topk_probs)]
+
+                print(f"Top prediction is {topk_letters[0]}")
+
+                self.prediction_queue.put(topk_letters[:10])
 
             # Add a delay to prevent multiple detections for the same keystroke
             self.debounce_time = time.time()
