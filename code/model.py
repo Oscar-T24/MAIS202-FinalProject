@@ -8,6 +8,7 @@ import os
 import string
 import re
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 import torch
 import os
@@ -22,6 +23,8 @@ from scipy.signal import find_peaks
 from queue import Queue
 import time
 from data_processing import create_spectrogram_and_numpy
+
+matplotlib.use('Agg')  # Use a non-interactive backend
 
 BASE_SIZE = torch.Size([1,129,300])
 #DATA_DIR = "dell_test"
@@ -378,6 +381,15 @@ class LiveKeystrokeDetector:
         self.is_recording = False
         self.debounce_time = time.time()
         self.letters = "abcdefghijklmnopqrstuvwxyz"
+        self.threshold = 75
+        self.prominence = 200
+
+    def set_threshold(self,threshold,prominence):
+        if int(threshold) > 100 or int(threshold) < 0:
+            return None
+        self.threshold = int(threshold)
+        self.prominence = int(prominence)
+        return True
         
     def audio_callback(self, indata, frames, time_info, status):
         """Callback function for audio streaming"""
@@ -429,14 +441,11 @@ class LiveKeystrokeDetector:
         # Get the energy over time
         energy = np.sum(spectrogram_array[0], axis=0)  # shape: (time_bins,)
 
-        
-        threshold = np.percentile(energy, 75)
-
         peaks, properties = find_peaks(
         energy,
-        height=np.percentile(energy, 60),
-        distance=5,
-        prominence=1
+        height=np.percentile(energy, self.threshold),
+        distance=10,
+        prominence=self.prominence
         )   
 
         # need to finetune 

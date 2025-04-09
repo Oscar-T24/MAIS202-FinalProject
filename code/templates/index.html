@@ -109,7 +109,7 @@
 <body>
     <div class="container">
         <h1>Keystroke Audio Recording and Prediction</h1>
-        
+
         <div class="section">
             <h2>Recording Mode</h2>
             <button id="recordButton" class="button record-button">Start Recording</button>
@@ -131,6 +131,15 @@
             <div id="predictionHistory"></div>
             <div id="keyboard"></div>
         </div>
+        <h3>Threshold Setting</h3>
+        <label for="thresholdSlider">Threshold: <span id="thresholdValue">50</span></label>
+        <input type="range" id="thresholdSlider" min="0" max="100" value="50" disabled/>
+        <div id="thresholdStatus" class="status"></div>
+
+        <h3>Prominence Setting</h3>
+        <label for="prominenceSlider">Prominence: <span id="prominenceValue">50</span></label>
+        <input type="range" id="prominenceSlider" min="0" max="100" value="50" disabled/>
+        <div id="promineneceStatus" class="status"></div>
     </div>
 
     <script>
@@ -147,6 +156,12 @@
         const predictionHistory = document.getElementById('predictionHistory');
         const keyboard = document.getElementById('keyboard');
         const socket = io();
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const prominenceStatus = document.getElementById('prominenceStatus');
+        const prominenceSlider = document.getElementById('prominenceSlider');
+        const prominenceValue = document.getElementById('prominenceValue');
+        const thresholdStatus = document.getElementById('thresholdStatus');
 
         // Create keyboard layout
         const keys = 'qwertyuiopasdfghjklzxcvbnm'.split('');
@@ -215,6 +230,8 @@
                         predictButton.classList.add('active');
                         predictionStatus.textContent = 'Listening for keystrokes...';
                         predictionStatus.className = 'status info';
+                        thresholdSlider.disabled = false; // enable slider only after the prediction mode is enabled
+                        prominenceSlider.disabled = false;
                         
                         // Start polling for predictions
                         predictionInterval = setInterval(pollForPredictions, 500);
@@ -298,6 +315,35 @@
                 }
             }
         });
+
+        // update the Threshold value 
+
+        thresholdSlider.addEventListener('input', () => {
+            thresholdValue.textContent = thresholdSlider.value;
+        });
+
+        prominenceSlider.addEventListener('input', () => {
+            prominenceValue.textContent = prominenceSlider.value;
+        });
+
+        thresholdSlider.addEventListener('change', async () => {
+        const value = thresholdSlider.value;
+        const prominence = prominenceSlider.value;
+        try {
+            const response = await fetch(`/set_threshold?threshold=${value}&prominence=${prominence}`);
+            const data = await response.json();
+            if (data.status === 'success') {
+                thresholdStatus.textContent = `Threshold set to ${value}`;
+                thresholdStatus.className = 'status success';
+            } else {
+                thresholdStatus.textContent = data.message || 'Failed to set threshold';
+                thresholdStatus.className = 'status error';
+            }
+        } catch (error) {
+            thresholdStatus.textContent = 'Error setting threshold';
+            thresholdStatus.className = 'status error';
+        }
+    });
     </script>
 </body>
 </html>

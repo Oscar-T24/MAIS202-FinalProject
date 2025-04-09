@@ -197,5 +197,20 @@ def get_prediction():
             "message": "No prediction available yet."
         })
 
+@app.route("/set_threshold")
+def set_threshold():
+    global detector
+    args = request.args
+    status = detector.set_threshold(args["threshold"],args["prominence"])
+    if status is None: 
+        return jsonify({
+            "status": "Error",
+            "message": "You must activate the prediction mode prior to setting the threshold"
+        })
+    return jsonify({
+            "status": "success",
+            "message":   f"Threshold sucessfully updated to {args["threshold"]}, prominence to {args["prominence"]}"
+        })
+
 if __name__ == '__main__':
     socketio.run(app, port=5001, debug=True)
