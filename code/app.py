@@ -11,16 +11,13 @@ import os
 import datetime
 import shutil
 from data_recording import data_recording
-from create_spectrogram import create_spectrogram_and_numpy
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from data_processing import generate_spectrograms
 from model import key_to_idx_tensors, KeystrokeCNN, train
 import torch
 import torch.nn.functional as F
-import librosa
-from scipy.signal import find_peaks
-from queue import Queue
+from model import LiveKeystrokeDetector
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -118,7 +115,7 @@ def train_model():
 
         model = KeystrokeCNN()
 
-        losses, *t = train(model,spectrogram_tensors,label_tensors,0.01,3,"demo",0.001)
+        losses, *t = train(model,spectrogram_tensors,label_tensors,0.01,3,"demo",0.001) # train the model taking the demo dataset
 
         
         return jsonify({
@@ -142,6 +139,7 @@ def predict():
     model = KeystrokeCNN()
     checkpoint_data = torch.load(checkpoint)
     model.load_state_dict(checkpoint_data['model_state_dict'])
+
     print("Model loaded successfully")
 
     # Then set the model to eval 
@@ -151,8 +149,6 @@ def predict():
     global detector
     detector = None
    
-    # Import the LiveKeystrokeDetector from the new Python file
-    from live_keystroke_detector import LiveKeystrokeDetector
     
     # Define a function to start the detector in a separate thread
     def start_detector():
@@ -185,7 +181,7 @@ def stop_predict():
             "status": "error",
             "message": "No active keystroke detection."
         })
-
+#fff
 @app.route("/get_prediction")
 def get_prediction():
     global detector

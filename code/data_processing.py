@@ -381,7 +381,7 @@ def create_spectrogram_and_numpy(audio_segment, dataset:str,extraction_method:st
                 # Save the stacked spectrograms as a NumPy array
                 numpy_array_path = os.path.join(NUMPY_OUTPUT_DIR, f"keystroke_{idx + 1}_{key}.npy")
                 np.save(numpy_array_path, mel_spect_stacked)
-
+#
                 plt.plot(mel_spect_stacked)
                 plt.save(f"keystroke_spectrograms/keystroke_{idx + 1}_{key}")
 
