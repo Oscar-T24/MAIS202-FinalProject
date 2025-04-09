@@ -31,3 +31,7 @@ Example spectrogram for key "r"
 ![keystroke_102_g](https://github.com/user-attachments/assets/d10ed852-f746-474f-bb1b-47cf19ad4666)
 
 ![keystroke_109_s](https://github.com/user-attachments/assets/c48f4430-3a2f-47ba-a7c0-fc8fd2478f12)
+
+# TODO ! 
+
+Account for data imbalance : when there is an imbalance in the keys of the training dataset (one key is disproportionately present) apply some weighting to correct imbalance
