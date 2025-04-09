@@ -138,7 +138,7 @@
 
         <h3>Prominence Setting</h3>
         <label for="prominenceSlider">Prominence: <span id="prominenceValue">50</span></label>
-        <input type="range" id="prominenceSlider" min="0" max="100" value="50" disabled/>
+        <input type="range" id="prominenceSlider" min="0" max="500" value="50" disabled/>
         <div id="promineneceStatus" class="status"></div>
     </div>
 
@@ -272,23 +272,35 @@
                 
                 if (data.status === 'success') {
                     // Update the prediction display
-                    predictionDisplay.textContent = `Predicted Key: ${data.prediction}`;
-                    
+                    predictionDisplay.textContent = `Predicted Key: ${data.prediction[0][0]}`;
+
                     // Add to prediction history
                     const predictionItem = document.createElement('div');
                     predictionItem.className = 'prediction-item';
-                    predictionItem.textContent = `Key: ${data.prediction} (${new Date().toLocaleTimeString()})`;
+                    predictionItem.textContent = `Key: ${data.prediction[0][0]} (${new Date().toLocaleTimeString()})`;
                     predictionHistory.insertBefore(predictionItem, predictionHistory.firstChild);
-                    
-                    // Highlight the key on the keyboard
+
+                    // Clear previous coloring
                     const keys = keyboard.getElementsByClassName('key');
                     Array.from(keys).forEach(key => {
-                        if (key.textContent === data.prediction) {
-                            key.classList.add('active');
-                        } else {
-                            key.classList.remove('active');
+                        key.style.backgroundColor = '';
+                    });
+
+                    // Apply coloring based on probabilities
+                    data.prediction.forEach(([keyChar, probability]) => {
+                        const keyElement = Array.from(keys).find(k => k.textContent === keyChar);
+                        if (keyElement) {
+                            keyElement.style.backgroundColor = getColorFromProbability(probability);
                         }
                     });
+                const [maxKey, maxProb] = data.prediction.reduce((max, current) =>
+                    current[1] > max[1] ? current : max
+                );
+                const maxKeyElement = Array.from(keys).find(k => k.textContent === maxKey);
+                if (maxKeyElement) {
+                    maxKeyElement.style.color = 'red';
+                    maxKeyElement.style.fontWeight = 'bold';
+                }
                 }
             } catch (error) {
                 console.error('Error getting predictions:', error);
@@ -344,6 +356,13 @@
             thresholdStatus.className = 'status error';
         }
     });
+    // Function to convert probability to color (e.g., light to intense purple)
+    function getColorFromProbability(probability) {
+        const intensity = Math.floor(Math.log10(probability * 9 + 1) * 255);
+        return `rgba(156, 39, 176, ${probability})`; // purple with alpha as probability
+    }
+
+
     </script>
 </body>
 </html>

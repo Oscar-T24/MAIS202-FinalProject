@@ -480,7 +480,7 @@ class LiveKeystrokeDetector:
 
                 print(f"Top prediction is {topk_letters[0]}")
 
-                self.prediction_queue.put(topk_letters[:10])
+                self.prediction_queue.put(topk_letters[:10]) # appends a tuple to the queue (key,normalised probability)
 
             # Add a delay to prevent multiple detections for the same keystroke
             self.debounce_time = time.time()

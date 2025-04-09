@@ -1,12 +1,21 @@
 ## Our MAIS project proposal : an acoustic based keystroke transcriber using deep learning 
 
-We plan to train our model on isolated key spectrograms
+The training relies on isolated keys
 
-* To run our audio dataset constructor, have a look at  `audio_sampling.ipynb` which records keyboard press/release and computer audio input simultaneously for a period of 10s.
+* To run our audio dataset constructor, have a look at `data_recording.py` which provides the necessary methods to record both audio channel microphone input and keyboard press/releases simultaneously. 
 
-* Then, a short time fourrier transform (STFT) is performed on the data chunked into small buffers
+* Then, a short time fourrier transform (STFT) is performed on the data chunked into small buffers. The STFT is applied to a short time frame between a key's press to its release, and a correction that ensures each window fits in a consistent time interval of 0.3s. 
+
+* Data is preprocessed in the following manner
+- Overlapping keys are removed with a pair comparison using a stack that iterates over the entire set of keys pressed
+- Keys that were pressed and never released (and vice versa) are omitted
+
+*The spectrograms are generated in following manner : 
+- The STFT is applied on a time "frame", then all the frames are stacked to form a 2D matrix.
   
-* The spectrograms are saved
+* The spectrograms are exported to numpy arrays of shape (129,300,`channel`) with `channel` the number of channels (mono = 1, stereo = 2, etc). 
+
+* The model 
 
 Example spectrogram for key "r" 
 
@@ -20,4 +29,5 @@ Example spectrogram for key "r"
 
 
 ![keystroke_102_g](https://github.com/user-attachments/assets/d10ed852-f746-474f-bb1b-47cf19ad4666)
+
 ![keystroke_109_s](https://github.com/user-attachments/assets/c48f4430-3a2f-47ba-a7c0-fc8fd2478f12)
